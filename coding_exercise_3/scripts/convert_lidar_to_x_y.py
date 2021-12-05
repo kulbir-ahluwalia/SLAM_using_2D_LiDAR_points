@@ -80,11 +80,19 @@ class listenerNode():
         self.orientation = np.array([self.q_x,self.q_y,self.q_z,self.q_w])
 
         #Following are for laser scan
-        self.angle_min = 0.0
-        self.angle_max = 0.0
-        self.angle_increment = 0.0
+        self.angle_min = -2.356194496154785
+        self.angle_max = 2.356194496154785
+        self.angle_increment = 0.004363323096185923
+
+        self.angles_of_lidar = np.linspace(self.angle_min,self.angle_max,1081)
+        print("angles from lidar are: ",self.angles_of_lidar)
+
+
+
+
 
         self.range_values = np.array([])
+        # ('length of range_values', 1081)
 
 
 
@@ -233,7 +241,7 @@ class listenerNode():
 
         self.x = msg.pose.pose.position.x
         self.y = msg.pose.pose.position.y
-        msg.pose.pose.orientation.y
+        # msg.pose.pose.orientation.y
 
 
         self.q_x = msg.pose.pose.orientation.x
@@ -260,16 +268,31 @@ class listenerNode():
         # rospy.loginfo("y_accel %s", self.y_accel)
 
     def callback2(self,msg):
-        self.angle_min = msg.angle_min
-        self.angle_max = msg.angle_max
-        self.angle_increment = msg.angle_increment
+        # self.angle_min = msg.angle_min
+        # self.angle_max = msg.angle_max
+        # self.angle_increment = msg.angle_increment
 
-        print("angle details are: ",self.angle_increment,self.angle_max,self.angle_min)
+        # print("angle details are: ",self.angle_increment,self.angle_max,self.angle_min)
 
         self.range_values = np.array(msg.ranges)
         print("type of range_values",type(self.range_values))
         print("length of range_values",len(self.range_values))
         print("range_values numpy array is:",self.range_values)
+
+        #since angle increment and min and max angle does not change, we set the values
+
+        self.x_value_lidar = np.sin(self.angles_of_lidar)*self.range_values
+        self.y_value_lidar = np.cos(self.angles_of_lidar)*self.range_values
+
+        print("x values from lidar are:", self.x_value_lidar)
+        print("y values from lidar are:", self.y_value_lidar)
+
+        plt.plot(self.y_value_lidar,self.x_value_lidar)
+        plt.grid(True)
+        plt.show()
+
+
+
 
 
         # rospy.loginfo("z_accel %s", self.z_accel)
