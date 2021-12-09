@@ -17,6 +17,14 @@ rosrun tf static_transform_publisher 0.15 0.0 0.24 1.570796 3.1415 1.570796 base
 
 ```
 
+For camera_link:
+```
+rosrun tf static_transform_publisher 0.15 0.0 0.24 1.570796 3.1415 1.570796 camera_link camera_center_imu_optical_frame 100
+rosrun tf static_transform_publisher 0.15 0.0 0.24 1.570796 3.1415 1.570796 camera_link camera_center_color_optical_frame 100
+
+
+```
+
 ```
 rosrun imu_filter_madgwick imu_filter_node _use_mag:=false _publish_tf:=false _world_frame:="enu" /imu/data_raw:=/terrasentia/camera_center/imu /imu/data:=/rtabmap/imu
 
