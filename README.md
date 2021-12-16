@@ -1,18 +1,18 @@
-# SLAM_using_2D_LiDAR_points
+# SLAM_using_2D_LiDAR_points   
 
-Please refer the report for this exercise for detailed explanation and images of the resulting map from 2D point clouds. 
+Please refer the report for this exercise for detailed explanation and images of the resulting map from 2D point clouds.   
 
 Install the following package before you begin:
 ```
 sudo apt-get install python-tk
 ```
-Commands to run the code and the rosbag (run each command in a separate terminal in the order below): 
+Commands to run the code and the rosbag (run each command in a separate terminal in the order below):   
 ```
 roscore
 rosbag play -l 2020-11-13-14-39-36.bag
 python split_and_merge_class_version.py
 rviz #(then add marker in the list of topics to visualize)
 ```
+Map obtained using merge and split algorithm on the 2D LiDAR data:   
 
-
-<!--  ![alt text](./qn2_plot_rviz_parameters_cropped.png?raw=true "Parameters") -->
+ ![alt text](./map_geometric_rotated_matches.png?raw=true "Parameters")
