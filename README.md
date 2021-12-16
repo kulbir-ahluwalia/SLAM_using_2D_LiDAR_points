@@ -13,3 +13,6 @@ rosbag play -l 2020-11-13-14-39-36.bag
 python split_and_merge_class_version.py
 rviz #(then add marker in the list of topics to visualize)
 ```
+
+
+<!--  ![alt text](./qn2_plot_rviz_parameters_cropped.png?raw=true "Parameters") -->
