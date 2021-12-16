@@ -34,6 +34,8 @@ class listenerNode():
         self.q_z = 0.0
         self.q_w = 0.0
         self.marker_id_number = 1
+        self.right_xy_array = []
+        self.left_xy_array = []
 
         self.velocity_x = 0.0
         # self.vy = 0.0
@@ -46,10 +48,10 @@ class listenerNode():
         self.angle_max = 2.356194496154785
         self.angle_increment = 0.004363323096185923
 
-        self.angles_of_lidar = np.linspace(
-            self.angle_min, self.angle_max, 1081)
-        print("angles from lidar are: ", self.angles_of_lidar)
+        self.angles_of_lidar = np.linspace(self.angle_min, self.angle_max, 1081)
+        # print("angles from lidar are: ", self.angles_of_lidar)
         self.range_values = np.array([])
+        self.marker_2_new = None
 
     def run(self):
         # this line is used to declare the time loop
@@ -65,24 +67,31 @@ class listenerNode():
 
         # Initialize the object to be used in the frame transformation
         self.br = tf.TransformBroadcaster()
+
         while not rospy.is_shutdown():
 
-            self.linearvelocity()  # call the function used to create the Odometry ROS message
-            # self.linearvelocity_gps()
+            if len(self.left_xy_array)>0:
 
-            # print("listenerNode.ekf_x is: ",listenerNode.ekf_x)
-            # print("listenerNode.ekf_y is: ",listenerNode.ekf_y)
+                self.linearvelocity()  # call the function used to create the Odometry ROS message
+                # self.linearvelocity_gps()
 
-            # this line is used to transform from local frame to global frame and it is necessary to plot the trajectory in RVIZ
-            self.br.sendTransform(
-                # (self.x, self.y, 0.0), self.orientation, rospy.Time.now(), "/base_link", "/map")
-                (self.x, self.y, 0.0), self.orientation, rospy.Time.now(), "/camera_link", "/map")
+                # print("listenerNode.ekf_x is: ",listenerNode.ekf_x)
+                # print("listenerNode.ekf_y is: ",listenerNode.ekf_y)
 
-            # self.br.sendTransform((self.gps_x_new, self.gps_y_new, 0.0), self.q_gps, rospy.Time.now(),"/base_link" , "/map")#this line is used to transform from local frame to global frame and it is necessary to plot the trajectory in RVIZ
-            # print(self.x)
-            # print("self.odom is: ",self.odom)
-            pub_odom.publish(self.odom)
-            self.rate.sleep()
+                # this line is used to transform from local frame to global frame and it is necessary to plot the trajectory in RVIZ
+                # self.br.sendTransform(
+                #     # (self.x, self.y, 0.0), self.orientation, rospy.Time.now(), "/base_link", "/map")
+                #     (self.x, self.y, 0.0), self.orientation, rospy.Time.now(), "/camera_link", "/map")
+
+                # self.br.sendTransform((self.gps_x_new, self.gps_y_new, 0.0), self.q_gps, rospy.Time.now(),"/base_link" , "/map")#this line is used to transform from local frame to global frame and it is necessary to plot the trajectory in RVIZ
+                # print(self.x)
+                # print("self.odom is: ",self.odom)
+                self.marker_2_new = self.LiDAR_MARKER_2()
+                self.split_and_merge_algorithm_custom(self.right_xy_array, Threshold_distance)
+                self.split_and_merge_algorithm_custom(self.left_xy_array, Threshold_distance)
+                pub_odom.publish(self.odom)
+                pub_rviz.publish(self.marker_2_new)
+                # self.rate.sleep()
 
     def linearvelocity(self):
         self.odom = Odometry()
@@ -120,7 +129,12 @@ class listenerNode():
         self.velocity_x = msg.twist.twist.linear.x
         self.yaw_rate = msg.twist.twist.angular.z
 
+    # def publish_cluster_of_points_to_marker(self,points):
+    #     marker = self.MakeMarker(points)
+    #     pub_rviz.publish(marker)
+
     def callback_laser_scan(self, msg):
+        print("Laser scan callback function called")
         # self.angle_min = msg.angle_min
         # self.angle_max = msg.angle_max
         # self.angle_increment = msg.angle_increment
@@ -128,91 +142,79 @@ class listenerNode():
         # print("angle details are: ",self.angle_increment,self.angle_max,self.angle_min)
 
         self.range_values = np.array(msg.ranges)
-        print("type of range_values", type(self.range_values))
-        print("length of range_values", len(self.range_values))
-        print("range_values numpy array is:", self.range_values)
+        # print("type of range_values", type(self.range_values))
+        # print("length of range_values", len(self.range_values))
+        # print("range_values numpy array is:", self.range_values)
 
         # since angle increment and min and max angle does not change, we set the values
 
-        self.x_value_lidar = np.cos(self.angles_of_lidar)*self.range_values
-        self.y_value_lidar = np.sin(self.angles_of_lidar)*self.range_values
+        # self.x_value_lidar = np.cos(self.angles_of_lidar)*self.range_values
+        # self.y_value_lidar = np.sin(self.angles_of_lidar)*self.range_values
 
-        print("x values from lidar are:", self.x_value_lidar)
-        print("y values from lidar are:", self.y_value_lidar)
+        # print("x values from lidar are:", self.x_value_lidar)
+        # print("y values from lidar are:", self.y_value_lidar)
 
         # plt.plot(self.y_value_lidar, self.x_value_lidar)
         # plt.grid(True)
 
         global pub_rviz
-        global threshold
-        global isPrint
+        global Threshold_distance
         ranges = np.asarray(msg.ranges)
-        # alpha = np.linspace(data.angle_min,data.angle_max,360)
         alpha = np.linspace(msg.angle_min, msg.angle_max, 1081)
+        self.right_xy_array,self.left_xy_array = self.polar_coord_to_cartesian_coord_fn(ranges, alpha)
+        
+    
 
-        # ranges[ranges == np.inf] = 2  # clip the distance to 3m
-
-        # ranges[ranges <= 0.019999] = 0
-        # ranges[ranges > 30] = 0
-
-        # ranges = ranges[ (ranges >= 0.019999) & (ranges <= 30) ]
-
-        xy_points_raw = self.Polar2Cartesian(ranges, alpha)
-        print("xy_points_raw shape is",xy_points_raw.shape)
-        print("xy_points_raw are: ",xy_points_raw)
-
-
-        points = self.SplitAndMerge(xy_points_raw, threshold)
-        print("points are: ",points)
-        # for point in points:
-        #     plt.scatter(point[0],point[1])
-        # plt.show()
-
-        for i in range(points.shape[0]-1):
-            ro, alpha = self.GetPolar(points[i:i+2, 0], points[i:i+2, 1])
-            ro, alpha = self.CheckPolar(ro, alpha)
-            if isPrint:
-                print("ro = {}, alpha = {}".format(ro, alpha))
-        if isPrint:
-            print("-------------------------------------")
-        # make marker for RVIZ and publish it
-        marker = self.MakeMarker(points)
-        pub_rviz.publish(marker)
-        # plt.show()
-
-
-    def Polar2Cartesian(self,r, alpha):
+        
+    #we also filter the distances here, we consider only the distances which are within [0.01999,30]
+    def polar_coord_to_cartesian_coord_fn(self,r, alpha):
         filtered_r = []
         filtered_alpha = []
         for i in range(0,len(r)):
             # if r[i]>=0.01999 and r[i]<30:
-            if r[i]>=0.02 and r[i]<25:
-                print("r is: ",r[i])
+            if r[i]>=0.02 and r[i]<30:
+                # print("r is: ",r[i])
                 filtered_r.append(r[i])
                 filtered_alpha.append(alpha[i])
 
+        
+        # print("filtered_r is:",filtered_r)
+        # print("shape of filtered r is:", filtered_r_numpy.shape)
+
+        # print("filtered_alpha is:",filtered_alpha)
+        # print("shape of filtered alpha is:", filtered_alpha_numpy.shape)
+
+        left_xy = []
+        right_xy = []
+
+        #create left and right divisions
+
+        for i in range(0,len(filtered_alpha)):
+            x = filtered_r[i]*np.cos(filtered_alpha[i])
+            y = filtered_r[i]*np.sin(filtered_alpha[i])
+
+            if y <0:
+                right_xy.append([x,y])
+
+            else:
+                left_xy.append([x,y])
+
+
+
         filtered_r_numpy = np.array(filtered_r)
         filtered_alpha_numpy = np.array(filtered_alpha)
-        print("filtered_r is:",filtered_r)
-        print("shape of filtered r is:", filtered_r_numpy.shape)
+        # return np.transpose(np.array([np.cos(filtered_alpha_numpy)*filtered_r_numpy, np.sin(filtered_alpha_numpy)*filtered_r_numpy]))
+        return right_xy,left_xy
 
-        print("filtered_alpha is:",filtered_alpha)
-        print("shape of filtered alpha is:", filtered_alpha_numpy.shape)
-        return np.transpose(np.array([np.cos(filtered_alpha_numpy)*filtered_r_numpy, np.sin(filtered_alpha_numpy)*filtered_r_numpy]))
-
-
-    def Cartesian2Polar(self,x, y):
-        r = np.sqrt(x**2 + y**2)
-        phi = np.arctan2(y, x)
-        return r, phi
-
-
-    def MakeMarker(self,points):
+    #old version of make marker
+    def LiDAR_marker_old(self,points):
         marker = Marker()
         marker.header.frame_id = "/base_link"
-        marker.type = marker.LINE_STRIP
+        # marker.type = marker.LINE_STRIP
+        marker.type = marker.LINE_LIST
         marker.action = marker.MODIFY
 
+        # #comment for qn1,2
         # marker.id = self.marker_id_number 
         # self.marker_id_number = self.marker_id_number +1
 
@@ -226,22 +228,35 @@ class listenerNode():
         marker.color.r = 0.0
         marker.color.g = 1.0
         marker.color.b = 1.0
-        # marker orientaiton
-        # marker.pose.orientation.x = 0.0
-        # marker.pose.orientation.y = 0.0
-        # marker.pose.orientation.z = 0.0
-        # marker.pose.orientation.w = 1.0
 
-        marker.pose.orientation.x = self.q_x
-        marker.pose.orientation.y = self.q_y
-        marker.pose.orientation.z = self.q_z
-        marker.pose.orientation.w = self.q_w
+        # marker orientaiton for qn 2 to compare with laser scan point cloud
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
 
-        # marker position
-        marker.pose.position.x = self.x
-        marker.pose.position.y = self.y
+        # marker position for qn 2
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
         marker.pose.position.z = 0.0
+
+
+        
+        # # marker orientaiton for qn 3,4 for mapping
+        # marker.pose.orientation.x = self.q_x
+        # marker.pose.orientation.y = self.q_y
+        # marker.pose.orientation.z = self.q_z
+        # marker.pose.orientation.w = self.q_w
+
+        # # marker position for qn 3,4
+        # marker.pose.position.x = self.x
+        # marker.pose.position.y = self.y
+        # marker.pose.position.z = 0.0
         # marker.lifetime = rospy.Duration()
+
+
+        
+        
         # marker.lifetime = rospy.time(10)
 
         # marker line points
@@ -253,90 +268,182 @@ class listenerNode():
             marker.points.append(p)
         return marker
 
+    
+    def distance_of_point_from_line(self,test_point, line_start_point, line_end_point): 
+        # print("test point is: ",test_point) 
+        # print("start point of line is:",line_start_point)
+        # print("End point of line is: ", line_end_point)
+        # point to line distance, where the line is given with points line_start_point and line_end_point
+        if np.all(np.equal(line_start_point, line_end_point)):
+            #following line gives distance from test point to the defining point of line
+            return np.linalg.norm(test_point-line_start_point)
+        
+        distance_of_point_from_line = np.divide(np.abs(np.linalg.norm(np.cross(line_end_point-line_start_point, line_start_point-test_point))), np.linalg.norm(line_end_point-line_start_point))
+        
+        
+        return distance_of_point_from_line
 
-    def GetPolar(self,X, Y):
-        # center the data
-        X = X-np.mean(X)
-        Y = Y-np.mean(Y)
-        # fit line through the first and last point (X and Y contains 2 points, start and end of the line)
-
-        #polyfit returns m=slope and intercept c, in that order. 
-        k, n = np.polyfit(X, Y, 1)
-        print("k and n are:",k,n)
-        alpha = m.atan(-1/k)  # in radians
-        ro = n/(m.sin(alpha)-k*m.cos(alpha))
-        return ro, alpha
-
-
-    def CheckPolar(self,ro, alpha):
-        if ro < 0:
-            alpha = alpha + m.pi
-            if alpha > m.pi:
-                alpha = alpha-2*m.pi
-            ro = -ro
-        return ro, alpha
-
-
-    def getDistance(self,xy_points_raw, Ps, Pe):  
-        # point to line distance, where the line is given with points Ps and Pe
-        if np.all(np.equal(Ps, Pe)):
-            return np.linalg.norm(xy_points_raw-Ps)
-        return np.divide(np.abs(np.linalg.norm(np.cross(Pe-Ps, Ps-xy_points_raw))), np.linalg.norm(Pe-Ps))
-
-
-    def GetMostDistant(self,xy_points_raw):
+    def get_farthest_point_fn(self,xy_points_raw):
         dmax = 0
         index = -1
-        for i in range(1, xy_points_raw.shape[0]):
-            d = self.getDistance(xy_points_raw[i, :], xy_points_raw[0, :], xy_points_raw[-1, :])
-            if (d > dmax):
+        for i in range(1, len(xy_points_raw)):
+            # xy_points_raw = np.array(xy_points_raw)
+            # get distance of ith point from the start and end of xy_points_raw (the points with least and greatest angles)
+            # we return the point with the maximum distance from the line connecting start and end of xy_points_raw
+            distance_of_point = self.distance_of_point_from_line(xy_points_raw[i, :], xy_points_raw[0, :], xy_points_raw[-1, :])
+            # print("distance_of_point is: ",distance_of_point)
+            if (distance_of_point > dmax):
                 index = i
-                dmax = d
+                dmax = distance_of_point
+
+        # print("farthest point is: ",xy_points_raw[index])
         return dmax, index
 
+    ##################################################################################
+    # The following version of split and merge does not work: because the entire vstack is printed
+    # we need to do clustering and print individual clusters
+    ##################################################################################
 
-    def SplitAndMerge(self,xy_points_raw, threshold):
-        d, ind = self.GetMostDistant(xy_points_raw)
-
-        if (d > threshold):
-            #the following line splits at the index 
-            xy_points_raw_left_part = self.SplitAndMerge(xy_points_raw[:ind+1, :], threshold)  # split and merge left array
-            xy_points_raw_right_part = self.SplitAndMerge(xy_points_raw[ind:, :], threshold)  # split and merge right array
-            # there are 2 "d" points, so exlude 1 (for example from 1st array)
-            points = np.vstack((xy_points_raw_left_part[:-1, :], xy_points_raw_right_part))
-        else:
-            points = np.vstack((xy_points_raw[0, :], xy_points_raw[-1, :]))
-        return points
 
     # def SplitAndMerge(self,xy_points_raw, threshold):
     #     d, ind = self.GetMostDistant(xy_points_raw)
 
+    #     if (d > threshold):
+    #         #the following line splits from beginning till the index 
+    #         #hence we get left array
+    #         xy_points_raw_left_part = self.SplitAndMerge(xy_points_raw[:ind+1, :], threshold) 
+
+    #         #the following line splits from the index till the end of the list
+    #         #hence we get right array
+    #         xy_points_raw_right_part = self.SplitAndMerge(xy_points_raw[ind:, :], threshold) 
+
+    #         # there are 2 "d" points, so exlude 1 (for example from 1st array)
+    #         #last point is removed from left_part
+    #         points = np.vstack((xy_points_raw_left_part[:-1, :], xy_points_raw_right_part))
+    #         print("points_after splitting into and stacking using vstack",points)
+    #     else:
+            
+    #         #add first and last point to the vstack? why?
+    #         #because these are the points across which when  line is made, dmax<threshold
+    #         #but we need to send clusters of points
+
+    #         points = np.vstack((xy_points_raw[0, :], xy_points_raw[-1, :]))
+    #         print("points_after splitting into and stacking using vstack",points)
+    #     return points
 
 
 
+    def LiDAR_MARKER_2(self):
+        marker = Marker()
+        marker.header.frame_id = "/base_link"
+        # marker.type = marker.LINE_STRIP
+        marker.type = marker.LINE_LIST
+        marker.action = marker.MODIFY
+
+        #comment for qn1,2
+        marker.id = self.marker_id_number 
+        self.marker_id_number = self.marker_id_number +1
+
+        # marker scale
+        marker.scale.x = 0.01
+        marker.scale.y = 0.01
+        marker.scale.z = 0.01
+
+        # marker color
+        marker.color.a = 1.0
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+
+        # # marker orientaiton for qn 2 to compare with laser scan point cloud
+        # marker.pose.orientation.x = 0.0
+        # marker.pose.orientation.y = 0.0
+        # marker.pose.orientation.z = 0.0
+        # marker.pose.orientation.w = 1.0
+
+        # # marker position for qn 2
+        # marker.pose.position.x = 0.0
+        # marker.pose.position.y = 0.0
+        # marker.pose.position.z = 0.0
 
 
-    # def callback(self,data):
-    #     global pub_rviz
-    #     global threshold
-    #     global isPrint
-    #     ranges = np.asarray(data.ranges)
-    #     # alpha = np.linspace(data.angle_min,data.angle_max,360)
-    #     alpha = np.linspace(data.angle_min, data.angle_max, 1081)
+        
+        # marker orientaiton for qn 3,4 for mapping
+        marker.pose.orientation.x = self.q_x
+        marker.pose.orientation.y = self.q_y
+        marker.pose.orientation.z = self.q_z
+        marker.pose.orientation.w = self.q_w
 
-    #     ranges[ranges == np.inf] = 30  # clip the distance to 30m
-    #     P = self.Polar2Cartesian(ranges, alpha)
-    #     points = self.SplitAndMerge(P, threshold)
-    #     for i in range(points.shape[0]-1):
-    #         ro, alpha = self.GetPolar(points[i:i+2, 0], points[i:i+2, 1])
-    #         ro, alpha = self.CheckPolar(ro, alpha)
-    #         if isPrint:
-    #             print("ro = {}, alpha = {}".format(ro, alpha))
-    #     if isPrint:
-    #         print("-------------------------------------")
-    #     # make marker for RVIZ and publish it
-    #     marker = self.MakeMarker(points)
-    #     pub_rviz.publish(marker)
+        # marker position for qn 3,4
+        marker.pose.position.x = self.x
+        marker.pose.position.y = self.y
+        marker.pose.position.z = 0.0
+        marker.lifetime = rospy.Duration()
+
+        # marker line points
+        marker.points = []
+        # add points to show in RVIZ
+        
+        return marker
+
+
+    def temp_points_for_marker(self,mkr,pts):
+        p1 = Point()
+        p2 = Point()
+        p1.x, p1.y, p1.z = pts[0][0], pts[0][1], 0
+        p2.x, p2.y, p2.z = pts[-1][0], pts[-1][1], 0
+        mkr.points.append(p1)
+        mkr.points.append(p2)
+
+    def distance_of_points(self,pt1,pt2):
+        d = ((pt2[1]-pt1[1])**2 + (pt2[0]-pt1[0])**2)**0.5
+        return d
+
+        ##########
+        #########
+    def split_and_merge_algorithm_custom(self,xy_points_raw, threshold):
+        xy_points_raw = np.array(xy_points_raw)
+
+        point_distance, ind = self.get_farthest_point_fn(xy_points_raw)
+
+        if (point_distance > threshold):
+            #the following line splits from beginning till the index 
+            #hence we get left array
+            xy_points_raw_left_part = self.split_and_merge_algorithm_custom(xy_points_raw[:ind+1, :], threshold) 
+
+            #the following line splits from the index till the end of the list
+            #hence we get right array
+            xy_points_raw_right_part = self.split_and_merge_algorithm_custom(xy_points_raw[ind:, :], threshold) 
+
+        else:
+            #mkr = self.MakeMarker2()
+            flag = 0
+            split_index = []
+
+            #set max length of a line to ensure accuracy of map and higher resolution
+            for i in range(len(xy_points_raw)):
+                if i<len(xy_points_raw)-1 and self.distance_of_points(xy_points_raw[i],xy_points_raw[i+1])>0.05:
+                    split_index.append(i)
+                    flag = 1
+
+            if flag == 1:
+                prev = 0
+                for i in range(len(split_index)):
+                    #if i != split_index[-1]:
+                    p1 = xy_points_raw[prev]
+                    p2 = xy_points_raw[split_index[i]]
+                    prev = split_index[i]+1
+
+                    points_to_send = [p1, p2]
+                    self.temp_points_for_marker(self.marker_2_new,points_to_send)
+                
+                p1 = xy_points_raw[prev]
+                p2 = xy_points_raw[-1]
+                points_to_send = [p1, p2]
+                self.temp_points_for_marker(self.marker_2_new,points_to_send)
+            
+            else:
+                self.temp_points_for_marker(self.marker_2_new,xy_points_raw)
 
 
     def callback_terrasentia_ekf(self, msg):
@@ -361,64 +468,14 @@ class listenerNode():
             self.yaw_rate = msg.twist.twist.angular.z
 
 
-    # def manual(self,pub, in1, in2):
-    #     global vel
-    #     vel.linear.x, vel.linear.y, vel.linear.z = in1, 0, 0
-    #     vel.angular.x, vel.angular.y, vel.angular.z = 0, 0, in2
-    #     pub.publish(vel)
-    #     return
-
-
-# # Main function.
-# if __name__ == '__main__':
-#     # Initialize the node and name it.
-
-#     rospy.init_node('LiDAR_example_node/MarkerArray', anonymous = True)
-
-#     # pub_vel = rospy.Publisher('cmd_vel', Twist, queue_size = 3)
-
-
-#     # Go to the main loop.
-#     ne = listenerNode()
-#     ne.run()
-
 
 if __name__ == '__main__':
     rospy.init_node('main')
-    threshold = 0.05
+    #set threshold distance and id_number for markers to be unique
+    Threshold_distance = 0.05
     id_number = 1
-    vel = Twist()
 
     pub_rviz = rospy.Publisher('visualization_msgs/MarkerArray', Marker, queue_size=0)
-    # pub_vel = rospy.Publisher('cmd_vel', Twist, queue_size=3)
-
-    # rospy.Subscriber("scan", LaserScan, callback)
-    # /terrasentia/scan
-    
-
-    isPrint = False
     ne = listenerNode()
     ne.run()
 
-	# while True:
-	# 	print("\nProvide robot velocities ('e' to exit,'p' to start printing lines): ")
-
-
-	# 	inp = raw_input()
-
-
-	# 	if inp == 'e':
-	# 		break
-	# 	if inp == 'p':
-	# 		isPrint = True
-	# 		continue
-	# 	else:
-	# 		isPrint = False
-	# 		try:
-	# 			in1,in2 = inp.split(' ') print("in1 and in2 are: ",in1,in2)
-	# 			in1 = float(in1)
-	# 			in2 = float(in2)
-	# 		except:
-	# 			print("##### WRONG INPUTS #####")
-	# 			continue
-	# 		manual(pub_vel,in1,in2)
